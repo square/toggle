@@ -1,0 +1,23 @@
+# Copy this file to ./config.yml or run the following command:
+#
+#   $ toggle --copy-defaults [PATH]
+#
+# which will copy {config,key}{,.*}.default files in the given PATH to
+# {config,key}{,.*} (removes .default extension)
+#
+# We're using the configuration conventions & setup:
+# https://git.squareup.com/iacono/toggle#configuration-conventions--setup
+#
+# If you've set up your local variables, you should be able to copy and go!
+#
+# Otherwise, run:
+#
+#   $ toggle --init-local
+#
+# And follow the instructions
+:development:
+  :some: :development_setting
+
+:production:
+  :some: :production_setting
+# define any other config blocks that you want!

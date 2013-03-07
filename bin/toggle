@@ -1,0 +1,200 @@
+#!/usr/bin/env ruby
+
+$LOAD_PATH.unshift File.expand_path("../../lib", __FILE__)
+
+require 'toggle'
+require 'optparse'
+require 'fileutils'
+
+def default_key_filepath
+  File.expand_path('../../defaults/key.yml.default', __FILE__)
+end
+
+def default_config_filepath
+  File.expand_path('../../defaults/config.yml.default', __FILE__)
+end
+
+def wants_to_force_copy? current_file
+  respond_yes_to? "File #{current_file} exists. Replace?"
+end
+
+def actual_key_in path
+  find_file_in path, /^(key(\.yml))?$/
+end
+
+def actual_config_in path
+  find_file_in path, /^config\.yml$/
+end
+
+# finds the first file in "path" arg that matches "regex" pattern
+# returns path + filename
+def find_file_in path, regex
+  file = Dir[File.join(path, '*')].map { |filepath|
+    File.basename filepath
+  }.find { |filename|
+    filename =~ regex
+  }
+
+  file ? File.join(path, file) : nil
+end
+
+# Returns true if response starts with a 'y' or 'Y' (as in 'yes')
+# Returns false if response starts with a 'n' or 'N' (as in 'no')
+# Aborts if response starts with a 'q' or 'Q' (as in 'quit')
+def respond_yes_to? prompt
+  print "#{prompt} (y/n/q) "
+  normalized_response = gets[0].chomp.downcase
+  normalized_response.eql?('q') ? abort('... quitting') : normalized_response.eql?('y')
+end
+
+# The reference file is guaranteed to exist
+def identical_files? reference_file, other_file
+  File.exists?(other_file) && FileUtils.identical?(reference_file, other_file)
+end
+
+# Method requires a path and file_pattern and recursively searchs for matching
+# files.
+#
+# When a match is found, method detects if the default is the same as the
+# "actual" (the same filename just without the .default).
+#
+# If the files are identical, the method does nothing. If the actual file does
+# not exist OR the user opts to clobber the existing, the default will replace
+# the actual. Otherwise, the actual is left as is.
+def recursively_copy_defaults path, file_pattern, options = {}
+  defaults = {attempt_force_copy: true}
+  options  = defaults.merge(options)
+
+  attempt_force_copy = options[:attempt_force_copy]
+
+  Dir[File.join(path, '/**/', file_pattern)].each do |default_file|
+    file = default_file.slice(/(.*)\.default$/, 1)
+
+    if identical_files? default_file, file
+      puts "Default is identical to #{file}, skipping!"
+    elsif !File.exists?(file) || (attempt_force_copy && wants_to_force_copy?(file))
+      puts "Copying #{file} from default"
+      FileUtils.cp default_file, file
+    else
+      puts "Not changing #{file}"
+    end
+  end
+end
+
+opt_parser = OptionParser.new do |opts|
+  opts.banner = "Usage: toggle <args>"
+  opts.separator ""
+  opts.separator "Specific arguments:"
+
+  opts.on('-g', '--init-local [PATH]', String, 'Adds [PATH]/.toggle.local with var placeholders. Default is $HOME.') do |path|
+    path ||= ENV['HOME']
+
+    if path && path.empty?
+      raise RuntimeError, 'You must specify a PATH or have HOME env set!'
+    end
+
+    local_config = File.join(path, '.toggle.local')
+    sourcing_bash_instructions = "if [ -s ~/.toggle.local ] ; then source ~/.toggle.local ; fi"
+
+    if !File.exists?(local_config) || wants_to_force_copy?(local_config)
+      content = <<-EOS.strip_heredoc
+        # Add any variables that you'd like below.
+        #
+        # We've included a few suggestions, but please feel free
+        # to modify as needed.
+        #
+        # Make sure that you source this file in your ~/.bash_profile
+        # or ~/.bashrc (or whereever you'd like) via:
+        #
+        # #{sourcing_bash_instructions}
+        export DATABASE_HOST=''
+        export DATABASE_NAME=''
+        export DATABASE_USERNAME=''
+        export DATABASE_PASSWORD=''
+        export USER_EMAIL=''
+      EOS
+
+      %x(echo "#{content}" > #{local_config})
+      puts "Local toggle config added at #{local_config}"
+      puts "Now edit the file and source it from ~/.bash_profile or ~/.bashrc via: #{sourcing_bash_instructions}"
+    else
+      puts "Not changing #{local_config}"
+    end
+  end
+
+  opts.on("-k", "--keys file", String, "Show available keys for the specified config FILE") do |file|
+    opts.banner = "Usage: toggle --keys FILE"
+
+    if File.exists? file
+      toggle = Toggle::Compiler.new(file).parsed_content
+      puts toggle.keys.map{|k| "- #{k}"}.join("\n")
+    else
+      puts "toggle config file not found, please check specified path"
+    end
+  end
+
+  # TODO: remove yaml preamble
+  opts.on("--values FILE,KEY", Array, "Show values for the KEY in the config FILE") do |params|
+    opts.banner = "Usage: toggle --values FILE,KEY"
+
+    if File.exists?(file = params[0])
+      toggle = Toggle::Compiler.new(file).parsed_content
+      if toggle.keys.include?(key = params[1].to_sym)
+        puts toggle[key].to_yaml.gsub(/(:password:).+/, "\\1 [redacted]")
+      else
+        puts "#{key} not found in #{file}"
+      end
+    else
+      puts "toggle config file not found, please check specified path"
+    end
+  end
+
+  opts.on('--copy-config-defaults [PATH]', String, 'Copy all toggle config defaults to actuals in PATH. Default is pwd.') do |path|
+    path ||= Dir.pwd
+    recursively_copy_defaults(path, 'config{,.*}.default')
+  end
+
+  opts.on('-c', '--copy-defaults [PATH]', String, 'Copy all .toggle.default to .toggle for PATH. Default is pwd.') do |path|
+    path ||= Dir.pwd
+    recursively_copy_defaults(path, '{key,config}{,.*}.default')
+  end
+
+  opts.on('--ensure-key [PATH]', String, 'Copies the default key in [PATH] if actual key is not present, does nothing otherwise. Default [PATH] is pwd.') do |path|
+    path ||= Dir.pwd
+    recursively_copy_defaults(path, 'key{,.*}.default', attempt_force_copy: false)
+  end
+
+  opts.on('-m', '--make-defaults [PATH]', String, 'Create [PATH]/{config|key}{,.*}.default. Default is pwd.') do |path|
+    path ||= Dir.pwd
+
+    default_key    = actual_key_in(path)    || default_key_filepath
+    default_config = actual_config_in(path) || default_config_filepath
+
+    key_destination    = File.join(path, 'key.yml.default')
+    config_destination = File.join(path, 'config.yml.default')
+
+    if !File.exists?(key_destination) || wants_to_force_copy?(key_destination)
+      FileUtils.cp(default_key, key_destination) unless identical_files?(default_key, key_destination)
+      puts "Default key written to #{key_destination}"
+      puts "Now go edit it!"
+    end
+
+    if !File.exists?(config_destination) || wants_to_force_copy?(config_destination)
+      FileUtils.cp(default_config, config_destination) unless identical_files?(default_config, key_destination)
+      puts "Default config written to #{config_destination}"
+      puts "Now go edit it!"
+    end
+  end
+
+  opts.on_tail("-v", "--version", "Show version") do
+    puts "Toggle version #{Toggle::VERSION}"
+    exit
+  end
+
+  opts.on_tail("-h", "--help", "Show this message") do
+    puts opts
+    exit
+  end
+end
+
+opt_parser.parse!

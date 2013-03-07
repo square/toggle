@@ -1,0 +1,9 @@
+<% @local_erb_attribute_value = 'local_erb_attribute_value' %>
+<% @remote_erb_attribute_value = 'remote_erb_attribute_value' %>
+:local:
+  :plain_attribute: local_plain_attribute_value
+  :erb_attribute: <%= @local_erb_attribute_value %>
+
+:remote:
+  :plain_attribute: remote_plain_attribute_value
+  :erb_attribute: <%= @remote_erb_attribute_value %>

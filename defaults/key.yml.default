@@ -1,0 +1,15 @@
+# Copy this file to ./key{.exts} or run the following command:
+#
+#   $ toggle --copy-defaults [PATH]
+#
+# which will copy {config,key}{.exts}.default files in the given PATH to
+# {config,key}{exts} (removes .default extension)
+#
+# You can toggle this file to use a particular config block you have
+# set up. To view which top level blocks are available for a given key file,
+# run:
+#
+#   $ toggle --keys FILENAME
+#
+# where FILENAME is the name of a given toggle config file.
+development # <= change "development" to whatever you'd like
