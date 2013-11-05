@@ -93,8 +93,10 @@ block to `#using`:
 ```ruby
 require 'toggle'
 
-toggle = Toggle.new config_filepath: './config.yml',
-                    key:             :beta
+toggle = Toggle.new(
+  config_filepath: './config.yml',
+  key: :beta
+)
 
 toggle.using(:alpha) do |s|
   puts "#{s[:name]} has a secret: #{s[:secret]}!"
@@ -119,8 +121,10 @@ value should be derived from:
 ```ruby
 require 'toggle'
 
-toggle = Toggle.new config_filepath: './config.yml',
-                    key_filepath:    './key.yml'
+toggle = Toggle.new(
+  config_filepath: './config.yml',
+  key_filepath: './key.yml'
+)
 
 puts "#{toggle[:name]} has a secret: #{toggle[:secret]}!"
 #=> mr_alpha has a secret: alpha-secret
@@ -171,15 +175,21 @@ require 'toggle'
 toggle = Toggle.new config_filepath: './config.yml',
                     key:             ENV['key']
 
-connection = SomeDBDriver.connect host:     toggle[:database][:host]
-                                  username: toggle[:database][:username]
-                                  password: toggle[:database][:password]
+connection = SomeDBDriver.connect(
+  host: toggle[:database][:host],
+  username: toggle[:database][:username],
+  password: toggle[:database][:password]
+)
 
-data = connection.get_data_from database: toggle[:database][:name],
-                                table:    toggle[:database][:table]
+data = connection.get_data_from(
+  database: toggle[:database][:name],
+  table: toggle[:database][:table]
+)
 
-SomeEmailer.send to:   toggle[:who_to_email],
-                 what: data
+SomeEmailer.send(
+  to: toggle[:who_to_email],
+  what: data
+)
 ```
 
 Now running `email_data.rb` under the development configuration settings is a
